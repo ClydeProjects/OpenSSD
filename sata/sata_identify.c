@@ -96,7 +96,11 @@ __align(4) UINT16 ht_identify_data[256] =
 						//		(ns)
 	120,				//	68:	Minimum PIO transfer cycle time with IORDY flow
 						//		control(ns)
+#if OPTION_SUPPORT_TRIM
+	BIT14,0x0000,  	//	69-70:	Reserved (for future command overlap and queuing)
+#else
 	0x0000,0x0000,  	//	69-70:	Reserved (for future command overlap and queuing)
+#endif
 	0x0000,0x0000,  	//	71-74:	Reserved for IDENTIFY PACKET DEVICE command
 	0x0000,0x0000,
 	(NCQ_SIZE - 1),		//	75:	Queue depth (= 32)
@@ -330,6 +334,7 @@ void ata_identify_device(UINT32 lba, UINT32 sector_count)
 	set_string_data(&addr[23], "0001", 4);
 	set_string_data(&addr[27], "OpenSSD Jasmine     ", 20);
 
+
 	addr[54] = g_sata_context.chs_cur_cylinders;
 	addr[55] = g_sata_context.chs_cur_heads;
 	addr[56] = g_sata_context.chs_cur_sectors;
@@ -371,6 +376,12 @@ void ata_identify_device(UINT32 lba, UINT32 sector_count)
 	addr[101] = (UINT16) (NUM_LSECTORS >> 16);
 	addr[106] = 0x4000;
 	addr[217] = 0x0001;
+
+	/* DATA SET MANAGEMENT TRIM Support */
+	#if OPTION_SUPPORT_TRIM
+	addr[169] = 0x0001;
+	addr[69] = BIT14; // Deterministic read after trim with words set to any value.
+	#endif
 
 	addr[255] = get_integrity_word();
 

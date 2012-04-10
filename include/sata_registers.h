@@ -44,7 +44,7 @@
 #define SATA_XFER_BYTES				(BS_BASE+0x005C)
 #define SATA_XFER_BYTES_REMAIN		(BS_BASE+0x0060)
 #define SATA_XFER_SECTORS_REMAIN	(BS_BASE+0x0064)
-#define SATA_SACTIVE				(BS_BASE+0x0070)
+#define SATA_SACTIVE				(BS_BASE+0x0070)	// NCQ active tag bits
 #define SATA_NCQ_BMP_1				(BS_BASE+0x0074)
 #define SATA_NCQ_BMP_2				(BS_BASE+0x0078)
 #define SATA_STATUS					(BS_BASE+0x00A0)	// 0=idle, 1/2=read, 3/4=write

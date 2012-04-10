@@ -67,6 +67,7 @@ void ftl_write(UINT32 const lba, UINT32 const num_sectors);
 void ftl_test_write(UINT32 const lba, UINT32 const num_sectors);
 void ftl_flush(void);
 void ftl_isr(void);
+void ftl_trim(UINT32 const lba, UINT32 const num_sectors);
 
 #endif //FTL_H
 

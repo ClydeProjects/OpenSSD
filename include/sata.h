@@ -43,15 +43,16 @@ typedef struct
 
 extern sata_ncq_t g_sata_ncq;
 
-#define CCL_FTL_D2H		0x01
-#define CCL_FTL_H2D		0x02
-#define CCL_OTHER		0x04
-#define	CCL_UNDEFINED	0x08
+#define CCL_FTL_D2H			0x01
+#define CCL_FTL_H2D			0x02
+#define CCL_OTHER			0x04
+#define	CCL_UNDEFINED		0x08
 
-#define	ATR_LBA_NOR		0x10
-#define	ATR_LBA_EXT		0x20
-#define	ATR_NO_SECT		0x40
-#define ATR_LOCK_FREE	0x80
+#define	ATR_LBA_NOR			0x10
+#define	ATR_LBA_EXT			0x20
+#define	ATR_NO_SECT			0x40
+#define ATR_LOCK_FREE		0x80
+#define ATR_LBA_SECT_CNT 	0x100
 
 #define READ      0
 #define WRITE     1

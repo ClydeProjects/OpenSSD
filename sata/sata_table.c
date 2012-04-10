@@ -22,14 +22,14 @@
 #include "sata_cmd.h"
 
 //	Command Class, LBA type in Register FIS
-const UINT8 ata_cmd_class_table[256] = {
+const UINT16 ata_cmd_class_table[256] = {
 			ATR_LOCK_FREE |	CCL_OTHER,			// 0x00	NOP
 							CCL_UNDEFINED,		// 0x01
 							CCL_UNDEFINED,		// 0x02
 							CCL_UNDEFINED,		// 0x03
 							CCL_UNDEFINED,		// 0x04
 							CCL_UNDEFINED,		// 0x05
-			ATR_LBA_EXT	|	CCL_OTHER,			// 0x06	Data Set Management
+			ATR_LBA_SECT_CNT| CCL_OTHER,		// 0x06	Data Set Management
 							CCL_UNDEFINED,		// 0x07
 			ATR_LOCK_FREE |	CCL_OTHER,			// 0x08	Device Reset
 							CCL_UNDEFINED,		// 0x09
@@ -349,7 +349,7 @@ const UINT8 ata_command_code_table[] =
 const ATA_FUNCTION_T ata_function_table[] =
 {
 	ata_nop,							// NOP
-	(ATA_FUNCTION_T) INVALID32,			// DATA SET MANAGEMENT
+	ata_dsm,							// DATA SET MANAGEMENT
 	(ATA_FUNCTION_T) INVALID32,			// DEVICE RESET
 	ata_recalibrate,					// RECALIBRATE
 	(ATA_FUNCTION_T) INVALID32,			// READ DMA EXT

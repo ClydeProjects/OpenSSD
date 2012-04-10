@@ -103,6 +103,9 @@ static __inline void handle_got_cfis(void)
 	fis_d1 = GETREG(SATA_FIS_H2D_1);
 	fis_d3 = GETREG(SATA_FIS_H2D_3);
 
+	if (cmd_code == ATA_READ_FPDMA_QUEUED || cmd_code == ATA_WRITE_FPDMA_QUEUED || cmd_code == ATA_DATA_SET_MANAGEMENT)
+		uart_printf("Code: %u SATA_FIS_H2D_: %u %u %u %u %u %u %u %u %u", cmd_code, GETREG(SATA_FIS_H2D_0), GETREG(SATA_FIS_H2D_1), GETREG(SATA_FIS_H2D_2), GETREG(SATA_FIS_H2D_3), GETREG(SATA_FIS_H2D_4), GETREG(SATA_FIS_H2D_5), GETREG(SATA_FIS_H2D_6), GETREG(SATA_FIS_H2D_7), cmd_type);
+
 	if (cmd_type & ATR_LBA_NOR)
 	{
 		if ((fis_d1 & BIT30) == 0)	// CHS
@@ -134,6 +137,11 @@ static __inline void handle_got_cfis(void)
 		{
 			sector_count = 0x10000;
 		}
+	}
+	else if (cmd_type & ATR_LBA_SECT_CNT)
+	{
+		lba = 0;
+		sector_count = (GETREG(SATA_FIS_H2D_3) & 0x0000FFFF);
 	}
 	else
 	{
@@ -217,6 +225,16 @@ static __inline void handle_got_cfis(void)
 		{
 			SETREG(SATA_CTRL_2, action_flags);
 		}
+	}
+	else if (cmd_code == 0x06)
+	{
+		SETREG(SATA_XFER_BYTES, sector_count * BYTES_PER_SECTOR);
+		SETREG(SATA_CTRL_2, DMA_WRITE | COMPLETE);
+
+		g_sata_context.slow_cmd.status = SLOW_CMD_STATUS_PENDING;
+		g_sata_context.slow_cmd.code = cmd_code;
+		g_sata_context.slow_cmd.lba = lba;
+		g_sata_context.slow_cmd.sector_count = sector_count;
 	}
 	else
 	{

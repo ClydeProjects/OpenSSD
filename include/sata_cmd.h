@@ -47,7 +47,7 @@ enum tag_FEATURES_subcommands
 
 #define MAXNUM_DRQ_SECTORS		0x01	/* using const UINT8 ht_identify_data[IDENTIFY_VALLEN] */
 
-extern const UINT8 ata_cmd_class_table[];
+extern const UINT16 ata_cmd_class_table[];
 extern const UINT8 ata_index_table[];
 extern const UINT8 ata_command_code_table[];
 extern const ATA_FUNCTION_T ata_function_table[];
@@ -75,6 +75,7 @@ void ata_nop(UINT32 lba, UINT32 sector_count);
 void ata_initialize_device_parameters(UINT32 lba, UINT32 sector_count);
 void ata_not_supported(UINT32 lba, UINT32 sector_count);
 void ata_srst(UINT32 lba, UINT32 sector_count);
+void ata_dsm(UINT32 lba, UINT32 sector_count);
 
 
 #endif	// SATA_CMD_H

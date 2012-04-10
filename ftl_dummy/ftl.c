@@ -102,3 +102,35 @@ void ftl_isr(void)
 {
 }
 
+void ftl_trim(UINT32 const lba, UINT32 const num_sectors)
+{
+	ASSERT(num_sectors > 0);
+
+	uart_printf("Num sectors: %u", num_sectors);
+	uart_printf("SATA_WBUF_PTR: %u", GETREG(SATA_WBUF_PTR));
+	uart_printf("g_ftl_write_buf_id: %u", g_ftl_write_buf_id);
+
+	UINT32 next_write_buf_id = (g_ftl_write_buf_id + num_sectors) % NUM_WR_BUFFERS;
+
+	for (UINT32 i=0;i<num_sectors;i++)
+	{
+		for (UINT32 j=0;j<512/8;j=j+2)
+		{
+			UINT32 address = read_dram_32(WR_BUF_PTR(g_ftl_write_buf_id)+j*sizeof(UINT32));
+			UINT32 reg2 = read_dram_32(WR_BUF_PTR(g_ftl_write_buf_id)+(j+1)*sizeof(UINT32));
+			UINT32 count = reg2 & 0xFFFF0000; // Count stored in the first four words.
+
+			// If count is zero. We continue, but also, if address is 48bit.
+			// We shouldn't get these unless it is an error.
+			if (count == 0 || (reg2 & 0x0000FFFF) > 0) //
+				continue;
+
+//			uart_print_hex(address);
+//			uart_print_hex(count);
+		}
+
+		g_ftl_write_buf_id = (g_ftl_write_buf_id + 1) % NUM_WR_BUFFERS;
+	}
+	SETREG(BM_STACK_WRSET, next_write_buf_id);	// change bm_read_limit
+	SETREG(BM_STACK_RESET, 0x02);				// change bm_read_limi
+}

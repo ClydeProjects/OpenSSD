@@ -341,3 +341,8 @@ void pio_sector_transfer(UINT32 const dram_addr, UINT32 const protocol)
 	}
 }
 
+void ata_dsm(UINT32 lba, UINT32 sector_count)
+{
+	ftl_trim(lba, sector_count);
+	send_status_to_host(0);
+}
