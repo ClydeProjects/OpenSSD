@@ -33,7 +33,7 @@
 
 #define MAX_LBA		(NUM_LSECTORS - 1)
 
-#define NCQ_SIZE	32
+#define NCQ_SIZE	4
 
 typedef struct
 {
@@ -53,6 +53,7 @@ extern sata_ncq_t g_sata_ncq;
 #define	ATR_NO_SECT			0x40
 #define ATR_LOCK_FREE		0x80
 #define ATR_LBA_SECT_CNT 	0x100
+#define ATR_LBA_NCQ			0x200
 
 #define READ      0
 #define WRITE     1
@@ -61,7 +62,7 @@ typedef struct
 {
 	UINT32	lba;
 	UINT32	sector_count;
-	UINT32	cmd_type;
+	UINT16	cmd_type;
 } CMD_T;
 
 // slow_cmd_t status

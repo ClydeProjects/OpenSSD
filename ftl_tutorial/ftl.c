@@ -680,6 +680,60 @@ void ftl_isr(void)
 	SETREG(APB_INT_STS, INTR_FLASH);
 }
 
+void ftl_trim(UINT32 const lba, UINT32 const num_sectors)
+{
+	uart_printf("Trimmed\n");
+
+	uart_printf("WR_BUF_ADDR: %u", WR_BUF_ADDR);
+	uart_printf("RD_BUF_ADDR: %u", RD_BUF_ADDR);
+
+	uart_printf("SATA_WBUF_PTR: %u", GETREG(SATA_WBUF_PTR));
+	uart_printf("SATA_RBUF_PTR: %u", GETREG(SATA_RBUF_PTR));
+
+	uart_printf("NUM_RD_BUFFERS: %u", NUM_RD_BUFFERS);
+	uart_printf("RD_BUF_PTR(g_ftl_read_buf_id): %u", RD_BUF_PTR(g_ftl_read_buf_id));
+	uart_printf("g_ftl_read_buf_id: %u", g_ftl_read_buf_id);
+	uart_printf("g_ftl_write_buf_id: %u", g_ftl_write_buf_id);
+
+//	UINT32 next_read_buf_id = (g_ftl_read_buf_id + 1) % NUM_RD_BUFFERS;
+//
+//	#if OPTION_FTL_TEST == 0
+//	while (next_read_buf_id == GETREG(SATA_RBUF_PTR));	// wait if the read buffer is full (slow host)
+//	#endif
+//
+//	uart_printf("TRANSFER_ADDR: %u", RD_BUF_PTR(g_ftl_read_buf_id));
+//	for (int i = 0;i<512/8;i++)
+//	{
+//		UINT32 val = read_dram_32(RD_BUF_PTR(g_ftl_read_buf_id)+i*sizeof(UINT32));
+//		if (val != 0)
+//			uart_print_hex(val);
+//	}
+//
+//    SETREG(BM_STACK_RDSET, next_read_buf_id);	// change bm_read_limit
+//	SETREG(BM_STACK_RESET, 0x02);				// change bm_read_limit
+//
+//	g_ftl_read_buf_id = next_read_buf_id;
+
+
+//	UINT32 next_read_buf_id = (g_ftl_read_buf_id + 1) % NUM_RD_BUFFERS;
+//
+//	SETREG(BM_STACK_RDSET, next_read_buf_id);	// change bm_read_limit
+//	SETREG(BM_STACK_RESET, 0x02);				// change bm_read_limit
+//
+//	g_ftl_read_buf_id++;
+
+//	UINT32 address = BS_BASE;
+//	while (address != SATA_EQ_CFG_2)
+//	{
+//		uart_printf("%p: %u\n", address, GETREG(address));
+//		address += 4;
+//	}
+
+	//uart_printf("Trimming %u %u %u %u %u %u %u %u\n", GETREG(SATA_FIS_H2D_0), GETREG(SATA_FIS_H2D_1), GETREG(SATA_FIS_H2D_2), GETREG(SATA_FIS_H2D_3), GETREG(SATA_FIS_H2D_4), GETREG(SATA_FIS_H2D_5), GETREG(SATA_FIS_H2D_6), GETREG(SATA_FIS_H2D_7));
+	//uart_printf("Trimmin2 %u %u %u %u %u %u %u %u\n", GETREG(SATA_FIS_D2H_0), GETREG(SATA_FIS_D2H_1), GETREG(SATA_FIS_D2H_2), GETREG(SATA_FIS_D2H_3), GETREG(SATA_FIS_D2H_4), GETREG(SATA_FIS_D2H_5), GETREG(SATA_FIS_D2H_6), GETREG(SATA_FIS_D2H_7));
+	send_status_to_host(0);
+}
+
 static void sanity_check(void)
 {
 	UINT32 dram_requirement = RD_BUF_BYTES + WR_BUF_BYTES + COPY_BUF_BYTES + FTL_BUF_BYTES

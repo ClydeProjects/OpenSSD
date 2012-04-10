@@ -41,10 +41,14 @@ static void eventq_get(CMD_T* cmd)
 
 	UINT32 EQReadData0	= GETREG(SATA_EQ_DATA_0);
 	UINT32 EQReadData1	= GETREG(SATA_EQ_DATA_1);
+	UINT32 EQReadData2  = GETREG(SATA_EQ_DATA_2);
+
+	uart_printf("EQReadData0: %u EQReadData1: %u EQReadData2: %u", EQReadData0,EQReadData1, EQReadData2);
 
 	cmd->lba			= EQReadData1 & 0x3FFFFFFF;
 	cmd->sector_count	= EQReadData0 >> 16;
 	cmd->cmd_type		= EQReadData1 >> 31;
+
 
 	if(cmd->sector_count == 0)
 		cmd->sector_count = 0x10000;
@@ -83,6 +87,7 @@ void Main(void)
 	{
 		if (eventq_get_count())
 		{
+			uart_printf("Got IO command");
 			CMD_T cmd;
 
 			eventq_get(&cmd);
@@ -98,11 +103,11 @@ void Main(void)
 		}
 		else if (g_sata_context.slow_cmd.status == SLOW_CMD_STATUS_PENDING)
 		{
-			void (*ata_function)(UINT32 lba, UINT32 sector_count);
-
+			uart_printf("Got slow IO command");
 			slow_cmd_t* slow_cmd = &g_sata_context.slow_cmd;
 			slow_cmd->status = SLOW_CMD_STATUS_BUSY;
 
+			void (*ata_function)(UINT32 lba, UINT32 sector_count);
 			ata_function = search_ata_function(slow_cmd->code);
 			ata_function(slow_cmd->lba, slow_cmd->sector_count);
 

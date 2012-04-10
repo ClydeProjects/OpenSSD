@@ -119,8 +119,8 @@ ATR_NO_SECT|ATR_LBA_EXT	| 	CCL_OTHER,			// 0x37	Set Max Address Ext
 							CCL_UNDEFINED,		// 0x5D
 							CCL_UNDEFINED,		// 0x5E
 							CCL_UNDEFINED,		// 0x5F
-							CCL_FTL_D2H,		// 0x60	Read FPDMA Queued
-							CCL_FTL_H2D,		// 0x61	Write FPDMA Queued
+			ATR_LBA_NCQ |   CCL_FTL_D2H,		// 0x60	Read FPDMA Queued
+			ATR_LBA_NCQ |   CCL_FTL_H2D,		// 0x61	Write FPDMA Queued
 							CCL_UNDEFINED,		// 0x62
 							CCL_UNDEFINED,		// 0x63
 							CCL_UNDEFINED,		// 0x64

@@ -364,6 +364,7 @@ void ata_identify_device(UINT32 lba, UINT32 sector_count)
 	#endif
 
 	#if OPTION_SUPPORT_NCQ
+	addr[75] |= (NCQ_SIZE - 1),
 	addr[76] |= (UINT16) BIT8;
 	#endif
 

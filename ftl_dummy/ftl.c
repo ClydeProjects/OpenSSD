@@ -49,19 +49,27 @@ void ftl_read(UINT32 const lba, UINT32 const total_sectors)
 			num_sectors_to_read = SECTORS_PER_PAGE - sect_offset;
 		}
 
-		UINT32 next_read_buf_id = (g_ftl_read_buf_id + 1) % NUM_RD_BUFFERS;
-
-		while (next_read_buf_id == GETREG(SATA_RBUF_PTR));	// wait if the read buffer is full (slow host)
-
-		SETREG(BM_STACK_RDSET, next_read_buf_id);	// change bm_read_limit
-		SETREG(BM_STACK_RESET, 0x02);				// change bm_read_limit
-
-		g_ftl_read_buf_id = next_read_buf_id;
+		nand_page_ptread_to_host(0, 0, 0, sect_offset, num_sectors_to_read);
 
 		sect_offset = 0;
 		sectors_remain -= num_sectors_to_read;
 		lpage_addr++;
 	}
+
+	for (UINT32 i = 0; i < NCQ_SIZE; i++)
+	{
+		UINT32 EQReadData0	= GETREG(SATA_EQ_DATA_0);
+		if (g_sata_ncq.queue[i] == EQReadData0 & 0x000000FF)
+		{
+			uart_printf("Sending SACTIVE %u", 0x1 << i)
+			SETREG(SATA_SACTIVE, 0x00000001 << i);
+			SETREG(SATA_CTRL_2, SEND_SACTIVE);
+
+			g_sata_ncq.queue[i] = -1;
+		}
+
+	}
+
 }
 
 void ftl_write(UINT32 const lba, UINT32 const total_sectors)
@@ -125,8 +133,8 @@ void ftl_trim(UINT32 const lba, UINT32 const num_sectors)
 			if (count == 0 || (reg2 & 0x0000FFFF) > 0) //
 				continue;
 
-//			uart_print_hex(address);
-//			uart_print_hex(count);
+			uart_print_hex(address);
+			uart_print_hex(count);
 		}
 
 		g_ftl_write_buf_id = (g_ftl_write_buf_id + 1) % NUM_WR_BUFFERS;

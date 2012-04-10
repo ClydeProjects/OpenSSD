@@ -264,6 +264,8 @@ void ftl_open(void)
     /* UINT32 volatile g_break = 0; */
     /* while (g_break == 0); */
 
+	uart_print("Booting FTL\n");
+
 	led(0);
     sanity_check();
     //----------------------------------------
@@ -276,8 +278,8 @@ void ftl_open(void)
 	// If necessary, do low-level format
 	// format() should be called after loading scan lists, because format() calls is_bad_block().
     //----------------------------------------
-/* 	if (check_format_mark() == FALSE) */
-	if (TRUE)
+ 	if (check_format_mark() == FALSE)
+	//if (TRUE)
 	{
         uart_print("do format");
 		format();
@@ -1114,6 +1116,7 @@ static void write_format_mark(void)
 }
 static BOOL32 check_format_mark(void)
 {
+	return TRUE; // Disable format for development temporarily.
 	// This function reads a flash page from (bank #0, block #0) in order to check whether the SSD is formatted or not.
 
 	#ifdef __GNUC__
@@ -1166,6 +1169,31 @@ static BOOL32 check_format_mark(void)
 	}
 }
 
+void ftl_trim(UINT32 const lba, UINT32 const num_sectors)
+{
+	uart_printf("Trimmed\n");
+
+	uart_printf("WR_BUF_ADDR: %u", WR_BUF_ADDR);
+	uart_printf("RD_BUF_ADDR: %u", RD_BUF_ADDR);
+
+	uart_printf("SATA_WBUF_PTR: %u", GETREG(SATA_WBUF_PTR));
+	uart_printf("SATA_RBUF_PTR: %u", GETREG(SATA_RBUF_PTR));
+
+	uart_printf("NUM_RD_BUFFERS: %u", NUM_RD_BUFFERS);
+	uart_printf("RD_BUF_PTR(g_ftl_read_buf_id): %u", RD_BUF_PTR(g_ftl_read_buf_id));
+	uart_printf("g_ftl_read_buf_id: %u", g_ftl_read_buf_id);
+	uart_printf("g_ftl_write_buf_id: %u", g_ftl_write_buf_id);
+
+	UINT32 next_read_buf_id = (g_ftl_read_buf_id + num_sectors) % NUM_RD_BUFFERS;
+
+	while (next_read_buf_id == GETREG(SATA_RBUF_PTR));	// wait if the read buffer is full (slow host)
+
+	SETREG(BM_STACK_RDSET, next_read_buf_id);	// change bm_read_limit
+	SETREG(BM_STACK_RESET, 0x02);				// change bm_read_limit
+
+	uart_printf("Trimmed finished\n");
+}
+
 // BSP interrupt service routine
 void ftl_isr(void)
 {
@@ -1205,3 +1233,5 @@ void ftl_isr(void)
 		}
     }
 }
+
+

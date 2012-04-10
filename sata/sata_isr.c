@@ -103,7 +103,7 @@ static __inline void handle_got_cfis(void)
 	fis_d1 = GETREG(SATA_FIS_H2D_1);
 	fis_d3 = GETREG(SATA_FIS_H2D_3);
 
-	if (cmd_code == ATA_READ_FPDMA_QUEUED || cmd_code == ATA_WRITE_FPDMA_QUEUED || cmd_code == ATA_DATA_SET_MANAGEMENT)
+	//if (cmd_code == ATA_READ_FPDMA_QUEUED || cmd_code == ATA_WRITE_FPDMA_QUEUED || cmd_code == ATA_DATA_SET_MANAGEMENT)
 		uart_printf("Code: %u SATA_FIS_H2D_: %u %u %u %u %u %u %u %u %u", cmd_code, GETREG(SATA_FIS_H2D_0), GETREG(SATA_FIS_H2D_1), GETREG(SATA_FIS_H2D_2), GETREG(SATA_FIS_H2D_3), GETREG(SATA_FIS_H2D_4), GETREG(SATA_FIS_H2D_5), GETREG(SATA_FIS_H2D_6), GETREG(SATA_FIS_H2D_7), cmd_type);
 
 	if (cmd_type & ATR_LBA_NOR)
@@ -138,6 +138,20 @@ static __inline void handle_got_cfis(void)
 			sector_count = 0x10000;
 		}
 	}
+	else if (cmd_type & ATR_LBA_NCQ)
+	{
+		UINT32 fis_d2 = GETREG(SATA_FIS_H2D_2);
+
+		lba = (fis_d1 & 0x00FFFFFF) | (fis_d2 << 24);
+		sector_count = ((GETREG(SATA_FIS_H2D_0) & 0xFF000000) >> 24) | ((fis_d2 & 0xFF000000) >> 16);
+
+		g_sata_ncq.queue[(fis_d3 & 0x000000F8) >> 3] = GETREG(SATA_NCQ_ORDER) & 0x000000FF; // Key: Tag Value: Order
+
+		UINT32 tag = (fis_d3 & 0x000000F8) >> 3;
+		UINT32 order = GETREG(SATA_NCQ_ORDER) & 0x000000FF;
+		uart_printf("Tag: %u %u", tag, order);
+
+	}
 	else if (cmd_type & ATR_LBA_SECT_CNT)
 	{
 		lba = 0;
@@ -149,8 +163,11 @@ static __inline void handle_got_cfis(void)
 		sector_count = 0;
 	}
 
+	uart_printf(" SOME DIE YOUUUUNG %u %u", lba, sector_count);
+
 	if (lba + sector_count > MAX_LBA + 1 && (cmd_type & ATR_NO_SECT) == 0)
 	{
+		uart_printf("Too large MAXLBA");
 		send_status_to_host(B_IDNF);
 	}
 	else if (cmd_type & (CCL_FTL_H2D | CCL_FTL_D2H))
@@ -167,6 +184,10 @@ static __inline void handle_got_cfis(void)
 			if (cmd_code == ATA_WRITE_DMA || cmd_code == ATA_WRITE_DMA_EXT)
 			{
 				action_flags = DMA_WRITE | COMPLETE;
+			}
+			else if (cmd_code == ATA_WRITE_FPDMA_QUEUED)
+			{
+				action_flags = FPDMA_WRITE;
 			}
 			else
 			{
@@ -193,6 +214,10 @@ static __inline void handle_got_cfis(void)
 			if (cmd_code == ATA_READ_DMA || cmd_code == ATA_READ_DMA_EXT)
 			{
 				action_flags = DMA_READ | COMPLETE;
+			}
+			else if (cmd_code == ATA_READ_FPDMA_QUEUED)
+			{
+				action_flags = FPDMA_READ;
 			}
 			else
 			{
@@ -226,7 +251,7 @@ static __inline void handle_got_cfis(void)
 			SETREG(SATA_CTRL_2, action_flags);
 		}
 	}
-	else if (cmd_code == 0x06)
+	else if (cmd_code == ATA_DATA_SET_MANAGEMENT)
 	{
 		SETREG(SATA_XFER_BYTES, sector_count * BYTES_PER_SECTOR);
 		SETREG(SATA_CTRL_2, DMA_WRITE | COMPLETE);
@@ -258,8 +283,18 @@ __irq void fiq_handler(void)
 
 	if (masked_int_stat & CMD_RECV)
 	{
+		uart_printf("Got Non-NCQ command...");
+
 		handle_got_cfis();
 		intr_processed = CMD_RECV;
+	}
+	else if (masked_int_stat & NCQ_CMD_RECV)
+	{
+		uart_printf("Got NCQ command...");
+
+		handle_got_cfis();
+
+		intr_processed = NCQ_CMD_RECV;
 	}
 	else if (masked_int_stat & OPERATION_ERR)
 	{
@@ -267,13 +302,17 @@ __irq void fiq_handler(void)
 	}
 	else if (masked_int_stat & REG_FIS_RECV)
 	{
-		if ((GETREG(SATA_FIS_H2D_0) & 0x000000FF) == FISTYPE_REGISTER_H2D)
+		UINT32 fistype = GETREG(SATA_FIS_H2D_0) & 0x000000FF;
+
+		if (fistype == FISTYPE_REGISTER_H2D)
 		{
 			handle_srst();
 			intr_processed = 0;	// SATA_INT_STAT has been already cleared within handle_srst().
 		}
 		else
 		{
+			uart_printf("Unknown FIS");
+			uart_print_hex(masked_int_stat);
 			if (GETREG(SATA_ERROR) & BIT25)
 			{
 				send_primitive_R_XX(SEND_R_ERR);	// unknown type of FIS
