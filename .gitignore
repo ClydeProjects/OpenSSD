@@ -1,0 +1,8 @@
+*.d
+*.o
+*.trc
+cscope*
+*.diff
+installer/installer
+*.bin
+*.elf
