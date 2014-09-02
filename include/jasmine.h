@@ -32,6 +32,7 @@
 #define OPTION_SUPPORT_NCQ		1	// 1 = support SATA NCQ (=FPDMA) for AHCI hosts, 0 = support only DMA mode
 #define OPTION_REDUCED_CAPACITY	0	// reduce the number of blocks per bank for testing purpose
 #define OPTION_SUPPORT_TRIM     1   // 1 = enables trim support for FTLs that support it.
+#define OPTION_SUPPORT_LIGHTNVM 1	// 1 = enable LightNVM host management
 
 #define CHN_WIDTH			2 	// 2 = 16bit IO
 #define NUM_CHNLS_MAX		4

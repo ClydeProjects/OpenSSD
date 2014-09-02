@@ -378,9 +378,16 @@ void ata_identify_device(UINT32 lba, UINT32 sector_count)
 	addr[217] = 0x0001;
 
 	/* DATA SET MANAGEMENT TRIM Support */
+	#if OPTION_SUPPORT_TRIM || OPTION_SUPPORT_LIGHTNVM
+	addr[69] = BIT14; // Deterministic read after trim with words set to any value.
+	#endif
+
 	#if OPTION_SUPPORT_TRIM
 	addr[169] = 0x0001;
-	addr[69] = BIT14; // Deterministic read after trim with words set to any value.
+	#endif
+
+	#if OPTION_SUPPORT_LIGHTNVM
+	addr[169] = addr[169] & (1 << 1);
 	#endif
 
 	addr[255] = get_integrity_word();
