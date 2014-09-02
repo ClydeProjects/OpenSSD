@@ -346,3 +346,31 @@ void ata_dsm(UINT32 lba, UINT32 sector_count)
 	ftl_trim(lba, sector_count);
 	send_status_to_host(0);
 }
+
+void ata_erase_block(UINT32 lba, UINT32 sector_count)
+{
+#if OPTION_SUPPORT_LIGHTNVM
+	ftl_erase(lba, sector_count);
+#endif
+	send_status_to_host(0);
+}
+
+void ata_lightnvm_identify(UINT32 lba, UINT32 sector_count)
+{
+	send_status_to_host(0);
+}
+
+void ata_lightnvm_identify_channel(UINT32 lba, UINT32 sector_count)
+{
+	send_status_to_host(0);
+}
+
+void ata_lightnvm_get_features(UINT32 lba, UINT32 sector_count)
+{
+	send_status_to_host(0);
+}
+
+void ata_lightnvm_set_responsibility(UINT32 lba, UINT32 sector_count)
+{
+	send_status_to_host(0);
+}

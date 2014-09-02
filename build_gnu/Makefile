@@ -1,4 +1,4 @@
-FTL	= dummy
+FTL	= lightnvm
 PREFIX 	= arm-none-eabi-
 CC 	= $(PREFIX)gcc
 AS 	= $(PREFIX)as

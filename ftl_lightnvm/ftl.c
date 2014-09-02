@@ -390,11 +390,6 @@ void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 	}
 }
 
-void ftl_erase(UINT32 lba)
-{
-
-}
-
 void ftl_flush(void)
 {
 	// do nothing
@@ -694,4 +689,14 @@ static void sanity_check(void)
 	{
 		while (1);
 	}
+}
+
+void ftl_trim(UINT32 const lba, UINT32 const num_sectors)
+{
+
+}
+
+void ftl_erase(UINT32 const lba, UINT32 const num_sectors)
+{
+
 }

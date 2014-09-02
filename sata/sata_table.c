@@ -183,7 +183,7 @@ ATR_NO_SECT|ATR_LBA_EXT	| 	CCL_OTHER,			// 0x37	Set Max Address Ext
 							CCL_UNDEFINED,		// 0x9D
 							CCL_UNDEFINED,		// 0x9E
 							CCL_UNDEFINED,		// 0x9F
-							CCL_UNDEFINED,		// 0xA0
+			ATR_LBA_SECT_CNT| CCL_OTHER,				// 0xA0
 							CCL_UNDEFINED,		// 0xA1
 							CCL_UNDEFINED,		// 0xA2
 							CCL_UNDEFINED,		// 0xA3
@@ -312,6 +312,11 @@ const UINT8 ata_command_code_table[] =
     0x97,	// 25 IDLE
     0x98,	// 26 CHECK POWER MODE
     0x99,	// 27 SLEEP
+    0xA0,   // LIGHTNVM ERASE COMMAND
+    0xA1,   // LIGHTNVM IDENTIFY COMMAND
+    0xA2,   // LIGHTNVM IDENTIFY CHANNEL
+    0xA3,   // LIGHTNVM GET FEATURES
+    0xA4,   // LIGHTNVM SET RESPONSIBILITIES
     0xB0,   // 28 SMART
     0xB1,   // 29 DEVICE CONFIGURATION
     0xC8,   // 30 READ DMA
@@ -376,6 +381,11 @@ const ATA_FUNCTION_T ata_function_table[] =
 	ata_idle,							// IDLE
 	ata_check_power_mode,				// CHECK POWER MODE
 	ata_sleep,							// SLEEP
+	ata_erase_block,					// LIGHTNVM ERASE COMMAND
+	ata_lightnvm_identify,				// LIGHTNVM IDENTIFY COMMAND
+	ata_lightnvm_identify_channel,			// LIGHTNVM IDENTIFY CHANNEL
+	ata_lightnvm_get_features,			// LIGHTNVM GET FEATURES
+	ata_lightnvm_set_responsibility,		// LIGHTNVM SET RESPONSIBILITIES
 	(ATA_FUNCTION_T) INVALID32,			// SMART
 	(ATA_FUNCTION_T) INVALID32,			// DEVICE CONFIGURATION
 	(ATA_FUNCTION_T) INVALID32,			// READ DMA

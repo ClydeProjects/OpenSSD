@@ -183,7 +183,12 @@ enum
 	ATA_SECURITY_DISABLE_PASSWORD	= 0xF6, /* Security Disable Password */
 	ATA_READ_NATIVE_MAX_ADDRESS		= 0xF8,	/* Read Native Max Address   */
 	ATA_SET_MAX_ADDRESS				= 0xF9,	/* Set Max Address   		 */
-	ATA_SRST						= 0xFF	/* SRST request is regarded as if it were an ATA command. */
+	ATA_SRST						= 0xFF,	/* SRST request is regarded as if it were an ATA command. */
+	ATA_ERASE_BLOCK				= 0xA0, /* LightNVM - Erase flash block */
+	ATA_LIGHTNVM_IDENTIFY			= 0xA1, /* LightNVM - Identify */
+	ATA_LIGHTNVM_IDENTIFY_CHANNEL		= 0xA2, /* LightNVM - Identify Channel */
+	ATA_LIGHTNVM_GET_FEATURES		= 0xA3, /* LightNVM - Get freatures */
+	ATA_LIGHTNVM_SET_RESPONSIBILITY		= 0xA4, /* LightNVM - Set responsibility */
 };
 
 

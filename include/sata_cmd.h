@@ -61,6 +61,7 @@ void ata_flush_cache(UINT32 lba, UINT32 sector_count);
 void ata_read_verify_sectors(UINT32 lba, UINT32 sector_count);
 void ata_set_multiple_mode(UINT32 lba, UINT32 sector_count);
 void ata_read_buffer(UINT32 lba, UINT32 sector_count);
+void ata_erase_block(UINT32 lba, UINT32 sector_count);
 void ata_write_buffer(UINT32 lba, UINT32 sector_count);
 void ata_seek(UINT32 lba, UINT32 sector_count);
 void ata_standby(UINT32 lba, UINT32 sector_count);
@@ -76,6 +77,11 @@ void ata_initialize_device_parameters(UINT32 lba, UINT32 sector_count);
 void ata_not_supported(UINT32 lba, UINT32 sector_count);
 void ata_srst(UINT32 lba, UINT32 sector_count);
 void ata_dsm(UINT32 lba, UINT32 sector_count);
+
+void ata_lightnvm_identify(UINT32 lba, UINT32 sector_count);
+void ata_lightnvm_identify_channel(UINT32 lba, UINT32 sector_count);
+void ata_lightnvm_get_features(UINT32 lba, UINT32 sector_count);
+void ata_lightnvm_set_responsibility(UINT32 lba, UINT32 sector_count);
 
 
 #endif	// SATA_CMD_H
