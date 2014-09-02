@@ -390,6 +390,11 @@ void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 	}
 }
 
+void ftl_erase(UINT32 lba)
+{
+
+}
+
 void ftl_flush(void)
 {
 	// do nothing
