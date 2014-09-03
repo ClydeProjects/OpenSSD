@@ -43,6 +43,7 @@ void ftl_open(void)
 {
 	sanity_check();
 
+	uart_printf("LightNVM on the rocks!\n");
 	// STEP 1 - read scan lists from NAND flash
 
 	scan_list_t* scan_list = (scan_list_t*) SCAN_LIST_ADDR;
@@ -191,7 +192,9 @@ void ftl_read(UINT32 const lba, UINT32 const total_sectors)
 			num_sectors_to_read = SECTORS_PER_PAGE - sect_offset;
 		}
 
-		temp = get_physical_address(lpage_addr);	// logical to physical mapping
+		temp = lpage_addr + sect_offset;
+		uart_printf("read lba: %u %u  phy: %u %u", lba, total_sectors, temp, num_sectors_to_read);
+//		temp = get_physical_address(lpage_addr);	// logical to physical mapping
 
 		if (temp != NULL)
 		{
@@ -277,11 +280,12 @@ void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 
 	while (remain_sectors != 0)
 	{
-		new_bank = g_target_bank;
-		g_target_bank = (g_target_bank + 1) % NUM_BANKS;
+		//new_bank = g_target_bank;
+		//g_target_bank = (g_target_bank + 1) % NUM_BANKS;
+		new_bank = lba / SECTORS_PER_BANK;
 
 		new_row = get_free_page(new_bank);					// row address of the page to write to
-		old_phys_page = get_physical_address(lpage_addr);	// row address of the page the old data was written to
+		old_phys_page = NULL; // get_physical_address(lpage_addr);	// row address of the page the old data was written to
 		old_bank = old_phys_page / PAGES_PER_BANK;
 		old_row = old_phys_page % PAGES_PER_BANK;
 
@@ -380,7 +384,7 @@ void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 
 		flash_issue_cmd(new_bank, RETURN_ON_ISSUE);
 
-		update_physical_address(lpage_addr, new_bank, new_row);
+		//update_physical_address(lpage_addr, new_bank, new_row);
 
 		sect_offset = 0;
 		remain_sectors -= num_sectors_to_write;
@@ -698,5 +702,7 @@ void ftl_trim(UINT32 const lba, UINT32 const num_sectors)
 
 void ftl_erase(UINT32 const lba, UINT32 const num_sectors)
 {
-
+	if (num_sectors == 0) /*protect first block on each bank */
+		return;
+	nand_block_erase_sync(lba, num_sectors);
 }

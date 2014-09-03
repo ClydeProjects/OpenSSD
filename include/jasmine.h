@@ -180,7 +180,11 @@ typedef struct
 // #define NUM_LSECTORS	(21168 + ((NUM_PSECTORS) / 2097152 * 1953504)) // 125045424, 9172304(provisioning ratio: 7.3%)
 
 // #define NUM_LSECTORS	(NUM_PSECTORS  / 100 * 86) // 14% provisioning
+#if OPTION_SUPPORT_LIGHTNVM
+#define NUM_LSECTORS	(NUM_PSECTORS) // 7% provisioning
+#else
 #define NUM_LSECTORS	(NUM_PSECTORS  / 100 * 93) // 7% provisioning
+#endif
 
 #include "ftl.h"
 #include "misc.h"
