@@ -21,9 +21,6 @@
 
 static void sanity_check(void);
 static BOOL32 is_bad_block(UINT32 const bank, UINT32 const vblk_offset);
-static UINT32 get_physical_address(UINT32 const lpage_addr);
-static void update_physical_address(UINT32 const lpage_addr, UINT32 const new_bank, UINT32 const new_row);
-static UINT32 get_free_page(UINT32 const bank);
 static BOOL32 check_format_mark(void);
 static void write_format_mark(void);
 static void format(void);
@@ -38,12 +35,17 @@ static volatile UINT32 g_program_fail_count;
 static volatile UINT32 g_erase_fail_count;
 
 static UINT32 g_scan_list_entries[NUM_BANKS];
+static UINT32 g_bank_buffer[NUM_BANKS];
+static UINT32 g_bank_last_written[NUM_BANKS];
+
+static UINT32 g_bank_ignore_access[NUM_BANKS];
 
 void ftl_open(void)
 {
 	sanity_check();
 
-	uart_printf("LightNVM on the rocks!\n");
+	uart_printf("LightNVM on the rocks!");
+	uart_printf("Bytes per page: %u Bytes per VBLK: %u Bytes per sector: %u", BYTES_PER_PAGE, BYTES_PER_VBLK, BYTES_PER_SECTOR);
 	// STEP 1 - read scan lists from NAND flash
 
 	scan_list_t* scan_list = (scan_list_t*) SCAN_LIST_ADDR;
@@ -82,6 +84,8 @@ void ftl_open(void)
 	{
 		UINT32 num_entries = NULL;
 		UINT32 result = OK;
+
+		g_bank_buffer[bank] = 0;
 
 		if (BSP_INTR(bank) & FIRQ_DATA_CORRUPT)
 		{
@@ -147,11 +151,6 @@ void ftl_open(void)
 		format();
 	}
 
-	// STEP 3 - initialize page mapping table
-	// The page mapping table is too large to fit in SRAM.
-
-	mem_set_dram(PAGE_MAP_ADDR, NULL, PAGE_MAP_BYTES);
-
 	// STEP 4 - initialize global variables that belong to FTL
 
 	g_ftl_read_buf_id = 0;
@@ -171,15 +170,26 @@ void ftl_open(void)
 	SETREG(FCONF_PAUSE, FIRQ_DATA_CORRUPT | FIRQ_BADBLK_L | FIRQ_BADBLK_H);
 
 	enable_irq();
+
+		/*for (bank = 0; bank < NUM_BANKS; bank++)
+	{
+		uart_printf("Access counter: %u=%u", bank, GETREG(BSP_CMD_ID(bank)));
+		g_bank_ignore_access[bank] = GETREG(BSP_CMD_ID(bank));
+	}*/
 }
 
 void ftl_read(UINT32 const lba, UINT32 const total_sectors)
 {
-	UINT32 bank, row, num_sectors_to_read, temp;
+	UINT32 bank, row, num_sectors_to_read, temp, vblk;
 
 	UINT32 lpage_addr		= lba / SECTORS_PER_PAGE;	// logical page address
 	UINT32 sect_offset 		= lba % SECTORS_PER_PAGE;	// sector offset within the page
 	UINT32 sectors_remain	= total_sectors;
+
+	vblk = lba / SECTORS_PER_VBLK;
+
+//	uart_printf("READ: %u (%u) %u %u %u %u", lba, total_sectors, lpage_addr, sect_offset, vblk, SECTORS_PER_PAGE);
+
 
 	while (sectors_remain != 0)	// one page per iteration
 	{
@@ -192,15 +202,16 @@ void ftl_read(UINT32 const lba, UINT32 const total_sectors)
 			num_sectors_to_read = SECTORS_PER_PAGE - sect_offset;
 		}
 
-		temp = lpage_addr + sect_offset;
-		uart_printf("read lba: %u %u  phy: %u %u", lba, total_sectors, temp, num_sectors_to_read);
+		temp = lpage_addr;
+//		uart_printf("read lba: %u %u  phy: %u %u", lba, total_sectors, temp, num_sectors_to_read);
 //		temp = get_physical_address(lpage_addr);	// logical to physical mapping
 
 		if (temp != NULL)
 		{
 			bank = temp / PAGES_PER_BANK;	// most significant bits represent bank number
-			row = temp % PAGES_PER_BANK;	// and remaining bits represent page number within the bank
+			row = vblk + lpage_addr % PAGES_PER_VBLK; //row address of the page to write to
 
+//			uart_printf("Reading from Bank %u Row %u", bank, row);
 			SETREG(FCP_CMD, FC_COL_ROW_READ_OUT);						// FC_COL_ROW_READ_OUT = sensing and data output
 			SETREG(FCP_DMA_CNT, num_sectors_to_read * BYTES_PER_SECTOR);// byte count must be an integer multiple of 512
 			SETREG(FCP_COL, sect_offset);								// data output does not necessarily start from the first sector of the page
@@ -272,125 +283,144 @@ void ftl_read(UINT32 const lba, UINT32 const total_sectors)
 
 void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 {
-	UINT32 new_bank, new_row, old_row, num_sectors_to_write, right_hole_sectors, left_hole_sectors, old_phys_page, old_bank, read_old_data;
+	UINT32 new_bank, new_buf, new_row, num_sectors_to_write, vblk, b, f;
+	UINT32 write_buffer = 0;
 
 	UINT32 lpage_addr	= lba / SECTORS_PER_PAGE;
 	UINT32 sect_offset	= lba % SECTORS_PER_PAGE;
+	vblk = lba / SECTORS_PER_VBLK;
+
+	uart_printf("WRITE: %u (%u) %u %u %u %u", lba, total_sectors, lpage_addr, sect_offset, vblk, SECTORS_PER_PAGE);
+
 	UINT32 remain_sectors = total_sectors;
 
 	while (remain_sectors != 0)
 	{
-		//new_bank = g_target_bank;
-		//g_target_bank = (g_target_bank + 1) % NUM_BANKS;
 		new_bank = lba / SECTORS_PER_BANK;
+		new_row = vblk + lpage_addr % PAGES_PER_VBLK; //row address of the page to write to
 
-		new_row = get_free_page(new_bank);					// row address of the page to write to
-		old_phys_page = NULL; // get_physical_address(lpage_addr);	// row address of the page the old data was written to
-		old_bank = old_phys_page / PAGES_PER_BANK;
-		old_row = old_phys_page % PAGES_PER_BANK;
+		new_buf = g_bank_buffer[new_bank];
+		uart_printf("write br: %u %u", new_bank, new_row);
 
-		// Tutorial FTL's policy #1 - one-to-one mapping from logical pages to physical pages
-		// Tutorial FTL's policy #2 - logical sectors in a logical page have the same physical order within a physical page
-		// In order to enforce the policies, we need a read-modify-write operations for Write requests
-		// whose starting position or ending position do not align to page boundaries.
-		// Take an example of SECTORS_PER_PAGE = 32, sect_offset = 7, num_sectors_to_write = 20
-		// Seven sectors from sector_offset #0 to #6: let us refer to these as "left hole sectors"
-		// Five sectors from sector_offset #27 to #31: let us refer to these as "right hole sectors"
-		// Left hole and right hole sectors correspond to old data that are not updated by the Write request.
-		// Each DRAM write buffer that is uniquely identified by Buffer ID is 32 sectors in terms of size.
-		// (In other words, DRAM write buffer space is divided into a number of buffers and the size of each buffer equals to page size.)
-		// Contrary to your intuition, the SATA hardware does not store the 20 sectors to the first 20 sectors of the buffer.
-		// Instead, it stores 20 sectors at sector offset 7 to 26. This behavior matches flash controller hardware's behavior when
-		// FO_E is specified.
-		// actual start address of transfer to/from DRAM = start address of given buffer + (sector offset * 512)
-		// Therefore, we can read out left hole and right hole sectors from flash to DRAM, which will be merged with the
-		// 20 sectors in a single buffer, and then write all 32 sectors to flash by a single flash command.
+		num_sectors_to_write = remain_sectors;
 
-		if (sect_offset + remain_sectors >= SECTORS_PER_PAGE)
-		{
-			right_hole_sectors = 0;
-			num_sectors_to_write = SECTORS_PER_PAGE - sect_offset;
-		}
-		else
-		{
-			UINT32 end_sect_offset = sect_offset + remain_sectors - 1;
-			right_hole_sectors = SECTORS_PER_PAGE - end_sect_offset - 1;
-			num_sectors_to_write = remain_sectors;
-		}
+		/* first write into buffer */
+		if (sect_offset == 0) {
+			UINT32 next_write_buf_id = g_ftl_write_buf_id;
 
-		left_hole_sectors = sect_offset;
-		read_old_data = FALSE;
-
-		if (old_phys_page != NULL)
-		{
-			if (left_hole_sectors != 0)
+			while (next_write_buf_id == GETREG(SATA_WBUF_PTR))
 			{
-				// Left hole data will be read from flash to DRAM, at the address FCP_DMA_ADDR
+				uart_printf("%u %u", next_write_buf_id, GETREG(SATA_WBUF_PTR));
+			}	// wait if the read buffer is full (slow host)
 
-				SETREG(FCP_CMD, FC_COL_ROW_READ_OUT);						// FC_COL_ROW_READ_OUT = sensing and data output
-				SETREG(FCP_OPTION, FO_P | FO_E);							// FO_P = 2-plane mode, FO_E = ECC
-				SETREG(FCP_DMA_ADDR, WR_BUF_PTR(g_ftl_write_buf_id));		// DRAM write buffer (not read buffer)
-				SETREG(FCP_DMA_CNT, left_hole_sectors * BYTES_PER_SECTOR);	// byte count must be an integer multiple of 512
-				SETREG(FCP_COL, 0);
-				SETREG(FCP_ROW_L(old_bank), old_row);						// NAND row address (when FO_P is used, automatically converted to 2*row and 2*row + 1)
-				SETREG(FCP_ROW_H(old_bank), old_row);
+			mem_copy(WR_WRITE_BUF_PTR(new_bank, new_buf),
+					WR_BUF_PTR(g_ftl_write_buf_id),
+					4096);
 
-				flash_issue_cmd(old_bank, RETURN_ON_ISSUE);
-
-				read_old_data = TRUE;
+			uart_printf("P[0/4] %u %u %u", WRITE_BUF_ADDR, WR_WRITE_BUF_PTR(new_bank, new_buf), g_ftl_write_buf_id);
+			uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			uart_print_hex(read_dram_32(4 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			uart_print_hex(read_dram_32(8 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			uart_print_hex(read_dram_32(12 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			for (f = 0; f < 8; f++) {
+				uart_printf("WRBUF: %u", f);
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))));
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+4));
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+8));
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+12));
 			}
 
-			if (right_hole_sectors != 0)
-			{
-				// Right hole data will be read from flash to DRAM, at the address
-				// FCP_DMA_ADDR + BYTES_PER_SECTOR * (SECTORS_PER_PAGE - right_hole_sectors)
 
-				SETREG(FCP_CMD, (left_hole_sectors != 0) ? FC_COL_OUT : FC_COL_ROW_READ_OUT);	// FC_COL_OUT = no need to sense again
-				SETREG(FCP_OPTION, FO_P | FO_E);
-				SETREG(FCP_DMA_ADDR, WR_BUF_PTR(g_ftl_write_buf_id));
-				SETREG(FCP_DMA_CNT, right_hole_sectors * BYTES_PER_SECTOR);
-				SETREG(FCP_COL, SECTORS_PER_PAGE - right_hole_sectors);
-				SETREG(FCP_ROW_L(old_bank), old_row);
-				SETREG(FCP_ROW_H(old_bank), old_row);
+		/* trigger write */
+		} else if (sect_offset + 8 == SECTORS_PER_PAGE) {
+			UINT32 next_write_buf_id = g_ftl_write_buf_id;
+			while (next_write_buf_id == GETREG(SATA_WBUF_PTR));	// wait if the read buffer is full (slow host)
 
-				flash_issue_cmd(old_bank, RETURN_ON_ISSUE);
-
-				read_old_data = TRUE;
+			mem_copy(WR_WRITE_BUF_PTR(new_bank, new_buf)
+							+ sect_offset * BYTES_PER_SECTOR,
+					WR_BUF_PTR(g_ftl_write_buf_id),
+					4096);
+			uart_printf("P[4/4] %u %u %u %u", WRITE_BUF_ADDR, WR_WRITE_BUF_PTR(new_bank, new_buf), WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR, g_ftl_write_buf_id);
+			uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			uart_print_hex(read_dram_32(4 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			uart_print_hex(read_dram_32(8 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			uart_print_hex(read_dram_32(12 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			for (f = 0; f < 8; f++) {
+				uart_printf("WRBUF: %u", f);
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))));
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+4));
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+8));
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+12));
 			}
+			uart_printf("Look in dram");
+			UINT32 larlar;
+			for (f = DRAM_BASE; f < DRAM_SIZE; f = f + 4)
+			{
+				larlar = read_dram_32(DRAM_BASE + f);
+				if (larlar == 0xCCCCCCCC)
+					uart_printf("FOUND PATTERN C: %u", DRAM_BASE+f);
+				if (larlar == 0x33333333)
+					uart_printf("FOUND PATTERN 3: %u", DRAM_BASE+f);
+			}
+
+			write_buffer = 1;
+
+			uart_printf("Last page, lets write %u %u", new_bank, new_row);
+		/* we are writing data within a page */
+		} else {
+			UINT32 next_write_buf_id = g_ftl_write_buf_id;
+			while (next_write_buf_id == GETREG(SATA_WBUF_PTR));	// wait if the read buffer is full (slow host)
+		
+			mem_copy(WR_WRITE_BUF_PTR(new_bank, new_buf)
+							+ (UINT32)(sect_offset * BYTES_PER_SECTOR),
+					WR_BUF_PTR(g_ftl_write_buf_id),
+					4096);
+			uart_printf("P[1/4] %u %u %u %u", WRITE_BUF_ADDR, WR_WRITE_BUF_PTR(new_bank, new_buf), WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR, g_ftl_write_buf_id);
+			uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			uart_print_hex(read_dram_32(4 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			uart_print_hex(read_dram_32(8 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			uart_print_hex(read_dram_32(12 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
+			for (f = 0; f < 8; f++) {
+				uart_printf("WRBUF: %u", f);
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))));
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+4));
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+8));
+				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+12));
+			}
+
 		}
 
-		// SATA will store the new data between left hole data and right hole data
+		if (write_buffer) {
+			for (b = 0; b < 4; b++) {
+				uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + (b*8) * BYTES_PER_SECTOR));
+				uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + (b*8) * BYTES_PER_SECTOR+4));
+				uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + (b*8) * BYTES_PER_SECTOR+8));
+				uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + (b*8) * BYTES_PER_SECTOR+12));
+			}
+			SETREG(FCP_CMD, FC_COL_ROW_IN_PROG);			// FC_COL_ROW_IN_PROG = data input and programming
+			SETREG(FCP_OPTION, FO_P | FO_E | FO_B_W_DRDY);
+			SETREG(FCP_DMA_ADDR, WR_WRITE_BUF_PTR(new_bank, new_buf));
+			SETREG(FCP_DMA_CNT, BYTES_PER_PAGE);
+			SETREG(FCP_COL, 0);
+			SETREG(FCP_ROW_L(new_bank), new_row);
+			SETREG(FCP_ROW_H(new_bank), new_row);
 
-		SETREG(FCP_CMD, FC_COL_ROW_IN_PROG);			// FC_COL_ROW_IN_PROG = data input and programming
-		SETREG(FCP_OPTION, FO_P | FO_E | FO_B_SATA_W);	// FO_B_SATA_W = HW should wait for SATA data arrival before commiting the flash operation,
-														// and, in addition, increase bm_write_limit when the flash operation finishes.
-														// Note that a bank will be indicated as busy after it accepts a flash command.
-														// Which means that it is "busy" while it is waiting for SATA data arrival.
+			flash_issue_cmd(new_bank, RETURN_WHEN_DONE);
 
-		SETREG(FCP_DMA_ADDR, WR_BUF_PTR(g_ftl_write_buf_id));	// Now this buffer contains the whole page data (left data + new data + right data)
-		SETREG(FCP_DMA_CNT, (left_hole_sectors + num_sectors_to_write + right_hole_sectors) * BYTES_PER_SECTOR);
-		SETREG(FCP_COL, (left_hole_sectors != 0) ? 0 : sect_offset);
-		SETREG(FCP_ROW_L(new_bank), new_row);
-		SETREG(FCP_ROW_H(new_bank), new_row);
+			g_bank_buffer[new_bank] = (g_bank_buffer[new_bank] + 1) % 3;
+		} 
 
-		if (read_old_data && old_bank != new_bank)
-		{
-			// FO_B_SATA_W does not guarantee that all the necessary data is ready in the buffer, because some of the data may come from a bank
-			// other than the target bank.
-
-			while ((GETREG(WR_STAT) & 0x00000001) != 0);	// wait for the old bank to accept the read command
-			while (BSP_FSM(old_bank) != BANK_IDLE);			// wait for the old bank to finish the read command
-		}
-
-		flash_issue_cmd(new_bank, RETURN_ON_ISSUE);
-
-		//update_physical_address(lpage_addr, new_bank, new_row);
 
 		sect_offset = 0;
 		remain_sectors -= num_sectors_to_write;
 		lpage_addr++;
 
+		while (GETREG(MON_CHABANKIDLE) != 0);	// This while() loop ensures that Waiting Room is empty and all the banks are idle.
+
 		g_ftl_write_buf_id = (g_ftl_write_buf_id + 1) % NUM_WR_BUFFERS;		// Circular buffer
+
+//		SETREG(BM_STACK_WRSET, g_ftl_write_buf_id);	// change bm_read_limit
+//		SETREG(BM_STACK_RESET, 0x01);				// change bm_read_limit	
 	}
 }
 
@@ -443,52 +473,6 @@ static BOOL32 is_bad_block(UINT32 const bank, UINT32 const vblk_offset)
 	return FALSE;
 
 #endif
-}
-
-static UINT32 get_physical_address(UINT32 const lpage_addr)
-{
-	// Page mapping table entry size is 4 byte.
-	return read_dram_32(PAGE_MAP_ADDR + lpage_addr * sizeof(UINT32));
-}
-
-static void update_physical_address(UINT32 const lpage_addr, UINT32 const new_bank, UINT32 const new_row)
-{
-	write_dram_32(PAGE_MAP_ADDR + lpage_addr * sizeof(UINT32), new_bank * PAGES_PER_BANK + new_row);
-}
-
-static UINT32 get_free_page(UINT32 const bank)
-{
-	// This function returns the row address for write operation.
-
-	UINT32 row;
-	UINT32 vblk_offset, page_offset;
-
-	row = g_target_row[bank];
-	vblk_offset = row / PAGES_PER_VBLK;
-	page_offset = row % PAGES_PER_VBLK;
-
-	if (page_offset == 0)	// We are going to write to a new vblock.
-	{
-		while (is_bad_block(bank, vblk_offset) && vblk_offset < VBLKS_PER_BANK)
-		{
-			vblk_offset++;	// We have to skip bad vblocks.
-		}
-	}
-
-	if (vblk_offset >= VBLKS_PER_BANK)
-	{
-		// Free vblocks are exhausted. Since this example FTL does not do garbage collection,
-		// no more data can be written to this SSD. The SSD stops working now.
-
-		led (1);
-		while (1);
-	}
-
-	row = vblk_offset * PAGES_PER_VBLK + page_offset;
-
-	g_target_row[bank] = row + 1;
-
-	return row;
 }
 
 static BOOL32 check_format_mark(void)
@@ -627,6 +611,7 @@ static void format(void)
 		}
 	}
 
+	uart_printf("formatted");
 	// In general, write_format_mark() should be called upon completion of low level format in order to prevent
 	// format() from being called again.
 	// However, since the tutorial FTL does not support power off recovery,
@@ -687,10 +672,11 @@ void ftl_isr(void)
 static void sanity_check(void)
 {
 	UINT32 dram_requirement = RD_BUF_BYTES + WR_BUF_BYTES + COPY_BUF_BYTES + FTL_BUF_BYTES
-		+ HIL_BUF_BYTES + TEMP_BUF_BYTES + SCAN_LIST_BYTES + PAGE_MAP_BYTES;
+		+ HIL_BUF_BYTES + TEMP_BUF_BYTES + SCAN_LIST_BYTES + WRITE_BUF_BYTES;
 
 	if (dram_requirement > DRAM_SIZE)
 	{
+		uart_printf("Not enough DRAM available. Requires: %u", dram_requirement);
 		while (1);
 	}
 }

@@ -24,7 +24,7 @@
 #define	BANK_BMP		0x00330033
 #define	CLOCK_SPEED		175000000
 
-#define	OPTION_2_PLANE			1	// 1 = 2-plane mode, 0 = 1-plane mode
+#define	OPTION_2_PLANE			0	// 1 = 2-plane mode, 0 = 1-plane mode
 #define OPTION_ENABLE_ASSERT    1	// 1 = enable ASSERT() for debugging, 0 = disable ASSERT()
 #define OPTION_FTL_TEST			0	// 1 = FTL test without SATA communication, 0 = normal
 #define OPTION_UART_DEBUG		1   // 1 = enable UART message output, 0 = disable
