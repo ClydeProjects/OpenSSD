@@ -410,6 +410,7 @@ static void write_page(UINT32 const lpn, UINT32 const sect_offset, UINT32 const 
     UINT32 bank, old_vpn, new_vpn;
     UINT32 vblock, page_num, page_offset, column_cnt;
 
+    UINT32 f;
     bank        = get_num_bank(lpn); // page striping
     page_offset = sect_offset;
     column_cnt  = num_sectors;
@@ -428,6 +429,14 @@ static void write_page(UINT32 const lpn, UINT32 const sect_offset, UINT32 const 
     {
         vblock   = old_vpn / PAGES_PER_BLK;
         page_num = old_vpn % PAGES_PER_BLK;
+
+		for (f = 0; f < 8; f++) {
+			uart_printf("WRBUF: %u", f);
+			uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))));
+			uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+4));
+			uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+8));
+			uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+12));
+		}
 
         //--------------------------------------------------------------------------------------
         // `Partial programming'
@@ -1204,4 +1213,16 @@ void ftl_isr(void)
 			}
 		}
     }
+}
+
+void ftl_trim(UINT32 const lba, UINT32 const num_sectors)
+{
+
+}
+
+void ftl_erase(UINT32 const lba, UINT32 const num_sectors)
+{
+	if (num_sectors == 0) /*protect first block on each bank */
+		return;
+	nand_block_erase_sync(lba, num_sectors);
 }

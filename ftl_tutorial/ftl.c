@@ -269,7 +269,7 @@ void ftl_read(UINT32 const lba, UINT32 const total_sectors)
 
 void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 {
-	UINT32 new_bank, new_row, old_row, num_sectors_to_write, right_hole_sectors, left_hole_sectors, old_phys_page, old_bank, read_old_data;
+	UINT32 new_bank, new_row, old_row, num_sectors_to_write, right_hole_sectors, left_hole_sectors, old_phys_page, old_bank, read_old_data, f;
 
 	UINT32 lpage_addr	= lba / SECTORS_PER_PAGE;
 	UINT32 sect_offset	= lba % SECTORS_PER_PAGE;
@@ -317,6 +317,14 @@ void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 		left_hole_sectors = sect_offset;
 		read_old_data = FALSE;
 
+		for (f = 0; f < 8; f++) {
+			uart_printf("WRBUF: %u", f);
+			uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))));
+			uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+4));
+			uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+8));
+			uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+12));
+		}
+
 		if (old_phys_page != NULL)
 		{
 			if (left_hole_sectors != 0)
@@ -354,6 +362,7 @@ void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 				read_old_data = TRUE;
 			}
 		}
+
 
 		// SATA will store the new data between left hole data and right hole data
 
@@ -689,4 +698,16 @@ static void sanity_check(void)
 	{
 		while (1);
 	}
+}
+
+void ftl_trim(UINT32 const lba, UINT32 const num_sectors)
+{
+
+}
+
+void ftl_erase(UINT32 const lba, UINT32 const num_sectors)
+{
+	if (num_sectors == 0) /*protect first block on each bank */
+		return;
+	nand_block_erase_sync(lba, num_sectors);
 }

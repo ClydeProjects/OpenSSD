@@ -1,7 +1,5 @@
 // Copyright 2011 INDILINX Co., Ltd.
 //
-// This file is part of Jasmine.
-//
 // Jasmine is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
@@ -36,16 +34,14 @@ static volatile UINT32 g_erase_fail_count;
 
 static UINT32 g_scan_list_entries[NUM_BANKS];
 static UINT32 g_bank_buffer[NUM_BANKS];
-static UINT32 g_bank_last_written[NUM_BANKS];
-
-static UINT32 g_bank_ignore_access[NUM_BANKS];
 
 void ftl_open(void)
 {
 	sanity_check();
 
-	uart_printf("LightNVM on the rocks!");
+	uart_printf("LightNVM initializing!");
 	uart_printf("Bytes per page: %u Bytes per VBLK: %u Bytes per sector: %u", BYTES_PER_PAGE, BYTES_PER_VBLK, BYTES_PER_SECTOR);
+
 	// STEP 1 - read scan lists from NAND flash
 
 	scan_list_t* scan_list = (scan_list_t*) SCAN_LIST_ADDR;
@@ -170,12 +166,6 @@ void ftl_open(void)
 	SETREG(FCONF_PAUSE, FIRQ_DATA_CORRUPT | FIRQ_BADBLK_L | FIRQ_BADBLK_H);
 
 	enable_irq();
-
-		/*for (bank = 0; bank < NUM_BANKS; bank++)
-	{
-		uart_printf("Access counter: %u=%u", bank, GETREG(BSP_CMD_ID(bank)));
-		g_bank_ignore_access[bank] = GETREG(BSP_CMD_ID(bank));
-	}*/
 }
 
 void ftl_read(UINT32 const lba, UINT32 const total_sectors)
@@ -190,7 +180,6 @@ void ftl_read(UINT32 const lba, UINT32 const total_sectors)
 
 //	uart_printf("READ: %u (%u) %u %u %u %u", lba, total_sectors, lpage_addr, sect_offset, vblk, SECTORS_PER_PAGE);
 
-
 	while (sectors_remain != 0)	// one page per iteration
 	{
 		if (sect_offset + sectors_remain < SECTORS_PER_PAGE)
@@ -203,15 +192,12 @@ void ftl_read(UINT32 const lba, UINT32 const total_sectors)
 		}
 
 		temp = lpage_addr;
-//		uart_printf("read lba: %u %u  phy: %u %u", lba, total_sectors, temp, num_sectors_to_read);
-//		temp = get_physical_address(lpage_addr);	// logical to physical mapping
 
 		if (temp != NULL)
 		{
 			bank = temp / PAGES_PER_BANK;	// most significant bits represent bank number
 			row = vblk + lpage_addr % PAGES_PER_VBLK; //row address of the page to write to
 
-//			uart_printf("Reading from Bank %u Row %u", bank, row);
 			SETREG(FCP_CMD, FC_COL_ROW_READ_OUT);						// FC_COL_ROW_READ_OUT = sensing and data output
 			SETREG(FCP_DMA_CNT, num_sectors_to_read * BYTES_PER_SECTOR);// byte count must be an integer multiple of 512
 			SETREG(FCP_COL, sect_offset);								// data output does not necessarily start from the first sector of the page
@@ -283,14 +269,14 @@ void ftl_read(UINT32 const lba, UINT32 const total_sectors)
 
 void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 {
-	UINT32 new_bank, new_buf, new_row, num_sectors_to_write, vblk, b, f;
+	UINT32 new_bank, new_buf, new_row, num_sectors_to_write, vblk;
 	UINT32 write_buffer = 0;
 
 	UINT32 lpage_addr	= lba / SECTORS_PER_PAGE;
 	UINT32 sect_offset	= lba % SECTORS_PER_PAGE;
 	vblk = lba / SECTORS_PER_VBLK;
 
-	uart_printf("WRITE: %u (%u) %u %u %u %u", lba, total_sectors, lpage_addr, sect_offset, vblk, SECTORS_PER_PAGE);
+//	uart_printf("WRITE: %u (%u) %u %u %u %u", lba, total_sectors, lpage_addr, sect_offset, vblk, SECTORS_PER_PAGE);
 
 	UINT32 remain_sectors = total_sectors;
 
@@ -300,103 +286,33 @@ void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 		new_row = vblk + lpage_addr % PAGES_PER_VBLK; //row address of the page to write to
 
 		new_buf = g_bank_buffer[new_bank];
-		uart_printf("write br: %u %u", new_bank, new_row);
+//		uart_printf("write br: %u %u", new_bank, new_row);
 
 		num_sectors_to_write = remain_sectors;
 
 		/* first write into buffer */
 		if (sect_offset == 0) {
-			UINT32 next_write_buf_id = g_ftl_write_buf_id;
-
-			while (next_write_buf_id == GETREG(SATA_WBUF_PTR))
-			{
-				uart_printf("%u %u", next_write_buf_id, GETREG(SATA_WBUF_PTR));
-			}	// wait if the read buffer is full (slow host)
 
 			mem_copy(WR_WRITE_BUF_PTR(new_bank, new_buf),
-					WR_BUF_PTR(g_ftl_write_buf_id),
+					WR_BUF_PTR(g_ftl_write_buf_id) + (sect_offset * BYTES_PER_SECTOR),
 					4096);
-
-			uart_printf("P[0/4] %u %u %u", WRITE_BUF_ADDR, WR_WRITE_BUF_PTR(new_bank, new_buf), g_ftl_write_buf_id);
-			uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			uart_print_hex(read_dram_32(4 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			uart_print_hex(read_dram_32(8 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			uart_print_hex(read_dram_32(12 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			for (f = 0; f < 8; f++) {
-				uart_printf("WRBUF: %u", f);
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))));
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+4));
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+8));
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+12));
-			}
-
 
 		/* trigger write */
 		} else if (sect_offset + 8 == SECTORS_PER_PAGE) {
-			UINT32 next_write_buf_id = g_ftl_write_buf_id;
-			while (next_write_buf_id == GETREG(SATA_WBUF_PTR));	// wait if the read buffer is full (slow host)
 
-			mem_copy(WR_WRITE_BUF_PTR(new_bank, new_buf)
-							+ sect_offset * BYTES_PER_SECTOR,
-					WR_BUF_PTR(g_ftl_write_buf_id),
+			mem_copy(WR_WRITE_BUF_PTR(new_bank, new_buf) + (sect_offset * BYTES_PER_SECTOR),
+					WR_BUF_PTR(g_ftl_write_buf_id) + (sect_offset * BYTES_PER_SECTOR),
 					4096);
-			uart_printf("P[4/4] %u %u %u %u", WRITE_BUF_ADDR, WR_WRITE_BUF_PTR(new_bank, new_buf), WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR, g_ftl_write_buf_id);
-			uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			uart_print_hex(read_dram_32(4 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			uart_print_hex(read_dram_32(8 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			uart_print_hex(read_dram_32(12 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			for (f = 0; f < 8; f++) {
-				uart_printf("WRBUF: %u", f);
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))));
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+4));
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+8));
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+12));
-			}
-			uart_printf("Look in dram");
-			UINT32 larlar;
-			for (f = DRAM_BASE; f < DRAM_SIZE; f = f + 4)
-			{
-				larlar = read_dram_32(DRAM_BASE + f);
-				if (larlar == 0xCCCCCCCC)
-					uart_printf("FOUND PATTERN C: %u", DRAM_BASE+f);
-				if (larlar == 0x33333333)
-					uart_printf("FOUND PATTERN 3: %u", DRAM_BASE+f);
-			}
 
 			write_buffer = 1;
 
-			uart_printf("Last page, lets write %u %u", new_bank, new_row);
-		/* we are writing data within a page */
 		} else {
-			UINT32 next_write_buf_id = g_ftl_write_buf_id;
-			while (next_write_buf_id == GETREG(SATA_WBUF_PTR));	// wait if the read buffer is full (slow host)
-		
-			mem_copy(WR_WRITE_BUF_PTR(new_bank, new_buf)
-							+ (UINT32)(sect_offset * BYTES_PER_SECTOR),
-					WR_BUF_PTR(g_ftl_write_buf_id),
+			mem_copy(WR_WRITE_BUF_PTR(new_bank, new_buf) + (sect_offset * BYTES_PER_SECTOR),
+					WR_BUF_PTR(g_ftl_write_buf_id) + (sect_offset * BYTES_PER_SECTOR),
 					4096);
-			uart_printf("P[1/4] %u %u %u %u", WRITE_BUF_ADDR, WR_WRITE_BUF_PTR(new_bank, new_buf), WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR, g_ftl_write_buf_id);
-			uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			uart_print_hex(read_dram_32(4 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			uart_print_hex(read_dram_32(8 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			uart_print_hex(read_dram_32(12 + WR_WRITE_BUF_PTR(new_bank, new_buf) + sect_offset * BYTES_PER_SECTOR));
-			for (f = 0; f < 8; f++) {
-				uart_printf("WRBUF: %u", f);
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))));
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+4));
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+8));
-				uart_print_hex(read_dram_32(WR_BUF_PTR((g_ftl_write_buf_id+f))+12));
-			}
-
 		}
 
 		if (write_buffer) {
-			for (b = 0; b < 4; b++) {
-				uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + (b*8) * BYTES_PER_SECTOR));
-				uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + (b*8) * BYTES_PER_SECTOR+4));
-				uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + (b*8) * BYTES_PER_SECTOR+8));
-				uart_print_hex(read_dram_32(WR_WRITE_BUF_PTR(new_bank, new_buf) + (b*8) * BYTES_PER_SECTOR+12));
-			}
 			SETREG(FCP_CMD, FC_COL_ROW_IN_PROG);			// FC_COL_ROW_IN_PROG = data input and programming
 			SETREG(FCP_OPTION, FO_P | FO_E | FO_B_W_DRDY);
 			SETREG(FCP_DMA_ADDR, WR_WRITE_BUF_PTR(new_bank, new_buf));
@@ -405,11 +321,10 @@ void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 			SETREG(FCP_ROW_L(new_bank), new_row);
 			SETREG(FCP_ROW_H(new_bank), new_row);
 
-			flash_issue_cmd(new_bank, RETURN_WHEN_DONE);
+			flash_issue_cmd(new_bank, RETURN_ON_ISSUE);
 
 			g_bank_buffer[new_bank] = (g_bank_buffer[new_bank] + 1) % 3;
 		} 
-
 
 		sect_offset = 0;
 		remain_sectors -= num_sectors_to_write;
@@ -419,8 +334,8 @@ void ftl_write(UINT32 const lba, UINT32 const total_sectors)
 
 		g_ftl_write_buf_id = (g_ftl_write_buf_id + 1) % NUM_WR_BUFFERS;		// Circular buffer
 
-//		SETREG(BM_STACK_WRSET, g_ftl_write_buf_id);	// change bm_read_limit
-//		SETREG(BM_STACK_RESET, 0x01);				// change bm_read_limit	
+		SETREG(BM_STACK_WRSET, g_ftl_write_buf_id);	// change bm_read_limit
+		SETREG(BM_STACK_RESET, 0x01);				// change bm_read_limit	
 	}
 }
 
